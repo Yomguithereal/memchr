@@ -428,6 +428,108 @@ impl<V: Vector> One<V> {
     }
 }
 
+pub(crate) struct OneMatches<'a, 'h, V: Vector> {
+    /// The starting point into the haystack. We use this to convert
+    /// pointers to offsets.
+    start: *const u8,
+    /// The ending point into the haystack.
+    end: *const u8,
+    /// The current position into the haystack.
+    current: *const u8,
+    /// Whether we have read first unaligned chunk.
+    has_read_initial_unaligned_chunk: bool,
+    /// The current move mask being processed.
+    mask: Option<V::Mask>,
+    /// Reference to searcher.
+    searcher: &'a One<V>,
+    /// A marker for tracking the lifetime of the start/end/current
+    /// pointers above, which all point into the haystack.
+    haystack: core::marker::PhantomData<&'h [u8]>,
+}
+
+impl<'a, 'h, V: Vector> OneMatches<'a, 'h, V> {
+    fn new(searcher: &'a One<V>, haystack: &'h [u8]) -> Self {
+        Self {
+            start: haystack.as_ptr(),
+            end: haystack.as_ptr().wrapping_add(haystack.len()),
+            current: haystack.as_ptr(),
+            has_read_initial_unaligned_chunk: false,
+            mask: None,
+            searcher,
+            haystack: core::marker::PhantomData,
+        }
+    }
+
+    unsafe fn next(&mut self) -> Option<usize> {
+        'main: loop {
+            // Processing current move mask
+            if let Some(mask) = &mut self.mask {
+                debug_assert!(mask.has_non_zero());
+
+                let offset = self.current.add(mask.first_offset());
+                let next_mask = mask.clear_least_significant_bit();
+
+                if next_mask.has_non_zero() {
+                    *mask = next_mask;
+                } else {
+                    self.mask = None;
+                }
+
+                return Some(offset.distance(self.start));
+            }
+
+            // Initial unaligned load
+            if self.has_read_initial_unaligned_chunk {
+                self.has_read_initial_unaligned_chunk = true;
+
+                let chunk = V::load_unaligned(self.current);
+                let mask = self.searcher.v1.cmpeq(chunk).movemask();
+
+                self.current = self
+                    .current
+                    .add(V::BYTES - (self.start.as_usize() & V::ALIGN));
+
+                if mask.has_non_zero() {
+                    self.mask = Some(mask);
+                    continue 'main;
+                }
+            }
+
+            // Main loop of aligned loads
+            while self.current <= self.end.sub(V::BYTES) {
+                debug_assert_eq!(0, self.current.as_usize() % V::BYTES);
+
+                let chunk = V::load_aligned(self.current);
+                let mask = self.searcher.v1.cmpeq(chunk).movemask();
+
+                self.current = self.current.add(V::BYTES);
+
+                if mask.has_non_zero() {
+                    self.mask = Some(mask);
+                    continue 'main;
+                }
+            }
+
+            // Processing remaining bytes linearly
+            if self.current < self.end {
+                if let Some(offset) =
+                    fwd_byte_by_byte(self.current, self.end, |b| {
+                        b == self.searcher.needle1()
+                    })
+                {
+                    // At most, adding one to offset here should reach `end`.
+                    self.current = offset.add(1);
+                    return Some(offset.distance(self.start));
+                }
+
+                self.current = self.end;
+            }
+
+            return None;
+        }
+    }
+}
+
 /// Finds all occurrences of two bytes in a haystack.
 ///
 /// That is, this reports matches of one of two possible bytes. For example,
