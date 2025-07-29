@@ -343,38 +343,43 @@ impl<'h> OneMatchesUnalignedThin<'h> {
             return None;
         }
 
+        let mut mask = self.mask;
+        let vectorized_end = self.end.sub(BYTES);
+        let mut current = self.current;
+        let start = self.start;
+        let splat = self.splat;
+
         'main: loop {
             // Processing current move mask
-            if self.mask != 0 {
-                let offset =
-                    self.current.sub(BYTES).add(first_offset(self.mask));
-                self.mask = clear_least_significant_bit(self.mask);
+            if mask != 0 {
+                let offset = current.sub(BYTES).add(first_offset(mask));
+                self.mask = clear_least_significant_bit(mask);
+                self.current = current;
 
-                return Some(offset.distance(self.start));
+                return Some(offset.distance(start));
             }
 
             // Main loop of unaligned loads
-            while self.current <= self.end.sub(BYTES) {
-                let chunk = _mm_loadu_si128(self.current as *const __m128i);
-                let cmp = _mm_cmpeq_epi8(chunk, self.splat);
-                let mask = _mm_movemask_epi8(cmp) as u32;
+            while current <= vectorized_end {
+                let chunk = _mm_loadu_si128(current as *const __m128i);
+                let cmp = _mm_cmpeq_epi8(chunk, splat);
+                mask = _mm_movemask_epi8(cmp) as u32;
 
-                self.current = self.current.add(BYTES);
+                current = current.add(BYTES);
 
                 if mask != 0 {
-                    self.mask = mask;
                     continue 'main;
                 }
             }
 
             // Processing remaining bytes linearly
-            while self.current < self.end {
-                if *self.current == self.needle {
-                    let offset = self.current.distance(self.start);
-                    self.current = self.current.add(1);
+            while current < self.end {
+                if *current == self.needle {
+                    let offset = current.distance(start);
+                    self.current = current.add(1);
                     return Some(offset);
                 }
-                self.current = self.current.add(1);
+                current = current.add(1);
             }
 
             return None;
