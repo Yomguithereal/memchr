@@ -100,8 +100,8 @@ impl<T> Pointer for *const T {
 }
 
 use core::arch::x86_64::{
-    __m128i, _mm_cmpeq_epi8, _mm_load_si128, _mm_loadu_si128,
-    _mm_movemask_epi8, _mm_or_si128, _mm_set1_epi8,
+    __m256i, _mm256_cmpeq_epi8, _mm256_load_si256, _mm256_loadu_si256,
+    _mm256_movemask_epi8, _mm256_or_si256, _mm256_set1_epi8,
 };
 
 #[inline(always)]
@@ -132,12 +132,12 @@ struct OneMatchesAligned<'h> {
     current: *const u8,
     mask: Option<(*const u8, u32)>,
     needle: u8,
-    splat: __m128i,
+    splat: __m256i,
     haystack: core::marker::PhantomData<&'h [u8]>,
 }
 
-const BYTES: usize = 16;
-const ALIGN: usize = 15;
+const BYTES: usize = 32;
+const ALIGN: usize = 31;
 
 // NOTE: could clamp the mask to avoid scalar operations at beginning and end
 impl<'h> OneMatchesAligned<'h> {
@@ -150,7 +150,7 @@ impl<'h> OneMatchesAligned<'h> {
             current: ptr,
             mask: None,
             needle,
-            splat: _mm_set1_epi8(needle as i8),
+            splat: _mm256_set1_epi8(needle as i8),
             haystack: core::marker::PhantomData,
         }
     }
@@ -194,9 +194,9 @@ impl<'h> OneMatchesAligned<'h> {
             while self.current <= self.end.sub(BYTES) {
                 debug_assert_eq!(0, self.current.as_usize() % BYTES);
 
-                let chunk = _mm_load_si128(self.current as *const __m128i);
-                let cmp = _mm_cmpeq_epi8(chunk, self.splat);
-                let mask = _mm_movemask_epi8(cmp) as u32;
+                let chunk = _mm256_load_si256(self.current as *const __m256i);
+                let cmp = _mm256_cmpeq_epi8(chunk, self.splat);
+                let mask = _mm256_movemask_epi8(cmp) as u32;
 
                 let next = self.current.add(BYTES);
 
@@ -228,7 +228,7 @@ impl<'h> OneMatchesAligned<'h> {
 }
 
 struct OneMatchesUnaligned<'h> {
-    splat: __m128i,
+    splat: __m256i,
     start: *const u8,
     end: *const u8,
     current: *const u8,
@@ -248,7 +248,7 @@ impl<'h> OneMatchesUnaligned<'h> {
             current: ptr,
             mask: 0,
             needle,
-            splat: _mm_set1_epi8(needle as i8),
+            splat: _mm256_set1_epi8(needle as i8),
             haystack: core::marker::PhantomData,
         }
     }
@@ -276,9 +276,9 @@ impl<'h> OneMatchesUnaligned<'h> {
 
             // Main loop of unaligned loads
             while current <= vectorized_end {
-                let chunk = _mm_loadu_si128(current as *const __m128i);
-                let cmp = _mm_cmpeq_epi8(chunk, splat);
-                mask = _mm_movemask_epi8(cmp) as u32;
+                let chunk = _mm256_loadu_si256(current as *const __m256i);
+                let cmp = _mm256_cmpeq_epi8(chunk, splat);
+                mask = _mm256_movemask_epi8(cmp) as u32;
 
                 current = current.add(BYTES);
 
@@ -303,8 +303,8 @@ impl<'h> OneMatchesUnaligned<'h> {
 }
 
 struct TwoMatchesUnaligned<'h> {
-    splat1: __m128i,
-    splat2: __m128i,
+    splat1: __m256i,
+    splat2: __m256i,
     start: *const u8,
     end: *const u8,
     current: *const u8,
@@ -326,8 +326,8 @@ impl<'h> TwoMatchesUnaligned<'h> {
             mask: 0,
             needle1,
             needle2,
-            splat1: _mm_set1_epi8(needle1 as i8),
-            splat2: _mm_set1_epi8(needle2 as i8),
+            splat1: _mm256_set1_epi8(needle1 as i8),
+            splat2: _mm256_set1_epi8(needle2 as i8),
             haystack: core::marker::PhantomData,
         }
     }
@@ -354,12 +354,12 @@ impl<'h> TwoMatchesUnaligned<'h> {
 
             // Main loop of unaligned loads
             while current <= vectorized_end {
-                let chunk = _mm_loadu_si128(current as *const __m128i);
-                let cmp1 = _mm_cmpeq_epi8(chunk, self.splat1);
-                let cmp2 = _mm_cmpeq_epi8(chunk, self.splat2);
-                let cmp = _mm_or_si128(cmp1, cmp2);
+                let chunk = _mm256_loadu_si256(current as *const __m256i);
+                let cmp1 = _mm256_cmpeq_epi8(chunk, self.splat1);
+                let cmp2 = _mm256_cmpeq_epi8(chunk, self.splat2);
+                let cmp = _mm256_or_si256(cmp1, cmp2);
 
-                mask = _mm_movemask_epi8(cmp) as u32;
+                mask = _mm256_movemask_epi8(cmp) as u32;
 
                 current = current.add(BYTES);
 
