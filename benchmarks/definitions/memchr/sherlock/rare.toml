@@ -19,7 +19,9 @@ engines = [
   "rust/memchrold/memchr/oneshot",
   "rust/memchrold/memchr/prebuilt",
   "rust/memchrold/memrchr",
-  "rust/bufchr/memchr/prebuilt",
+  "rust/bufchr/memchr/prebuilt/unaligned",
+  "rust/bufchr/memchr/prebuilt/aligned",
+  "rust/bufchr/memchr/prebuilt/thin",
 ]
 
 [[bench]]
@@ -76,7 +78,9 @@ engines = [
   "rust/memchrold/memchr/prebuilt",
   "rust/memchrold/memchr/naive",
   "rust/memchrold/memrchr",
-  "rust/bufchr/memchr/prebuilt",
+  "rust/bufchr/memchr/prebuilt/unaligned",
+  "rust/bufchr/memchr/prebuilt/aligned",
+  "rust/bufchr/memchr/prebuilt/thin",
 ]
 
 [[bench]]
@@ -133,7 +137,9 @@ engines = [
   "rust/memchrold/memchr/prebuilt",
   "rust/memchrold/memchr/naive",
   "rust/memchrold/memrchr",
-  "rust/bufchr/memchr/prebuilt",
+  "rust/bufchr/memchr/prebuilt/unaligned",
+  "rust/bufchr/memchr/prebuilt/aligned",
+  "rust/bufchr/memchr/prebuilt/thin",
 ]
 
 [[bench]]

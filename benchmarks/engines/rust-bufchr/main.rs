@@ -20,12 +20,20 @@ fn main() -> anyhow::Result<()> {
     }
     let quiet = args.iter().any(|a| a == "--quiet");
     let aligned = args.iter().any(|a| a == "--aligned");
+    let thin = args.iter().any(|a| a == "--thin");
     let engine = &**args.last().unwrap();
     let b = Benchmark::from_stdin()?;
-    let samples = match (&*engine, &*b.model, aligned) {
-        ("memchr-prebuilt", "count-bytes", false) => bufchr_prebuilt_count_unaligned(&b)?,
-        ("memchr-prebuilt", "count-bytes", true) => bufchr_prebuilt_count_aligned(&b)?,
-        (engine, model, _) => {
+    let samples = match (&*engine, &*b.model, aligned, thin) {
+        ("memchr-prebuilt", "count-bytes", false, false) => {
+            bufchr_prebuilt_count_unaligned(&b)?
+        }
+        ("memchr-prebuilt", "count-bytes", false, true) => {
+            bufchr_prebuilt_count_unaligned_thin(&b)?
+        }
+        ("memchr-prebuilt", "count-bytes", true, _) => {
+            bufchr_prebuilt_count_aligned(&b)?
+        }
+        (engine, model, _, _) => {
             anyhow::bail!("unrecognized engine '{engine}' and model '{model}'")
         }
     };
@@ -38,18 +46,29 @@ fn main() -> anyhow::Result<()> {
     Ok(())
 }
 
-fn bufchr_prebuilt_count_unaligned(b: &Benchmark) -> anyhow::Result<Vec<Sample>> {
+fn bufchr_prebuilt_count_unaligned(
+    b: &Benchmark,
+) -> anyhow::Result<Vec<Sample>> {
     let haystack = &b.haystack;
     let needle = b.one_needle_byte()?;
     shared::run(b, || Ok(bufchr_sse2_unaligned_iter(needle, haystack)))
 }
 
-fn bufchr_prebuilt_count_aligned(b: &Benchmark) -> anyhow::Result<Vec<Sample>> {
+fn bufchr_prebuilt_count_unaligned_thin(
+    b: &Benchmark,
+) -> anyhow::Result<Vec<Sample>> {
+    let haystack = &b.haystack;
+    let needle = b.one_needle_byte()?;
+    shared::run(b, || Ok(bufchr_sse2_unaligned_thin_iter(needle, haystack)))
+}
+
+fn bufchr_prebuilt_count_aligned(
+    b: &Benchmark,
+) -> anyhow::Result<Vec<Sample>> {
     let haystack = &b.haystack;
     let needle = b.one_needle_byte()?;
     shared::run(b, || Ok(bufchr_sse2_aligned_iter(needle, haystack)))
 }
-
 
 /// A trait for adding some helper routines to pointers.
 pub(crate) trait Pointer {
@@ -136,7 +155,6 @@ impl<'h> OneMatchesAligned<'h> {
             haystack: core::marker::PhantomData,
         }
     }
-
 
     unsafe fn next(&mut self) -> Option<usize> {
         if self.start >= self.end {
@@ -292,14 +310,83 @@ impl<'h> OneMatchesUnaligned<'h> {
             return None;
         }
     }
+}
 
+struct OneMatchesUnalignedThin<'h> {
+    splat: __m128i,
+    start: *const u8,
+    end: *const u8,
+    current: *const u8,
+    mask: u32,
+    needle: u8,
+    haystack: core::marker::PhantomData<&'h [u8]>,
+}
+
+impl<'h> OneMatchesUnalignedThin<'h> {
+    unsafe fn new(needle: u8, haystack: &[u8]) -> Self {
+        // dbg!(size_of::<Self>(), align_of::<Self>());
+        let ptr = haystack.as_ptr();
+
+        Self {
+            start: ptr,
+            end: ptr.wrapping_add(haystack.len()),
+            current: ptr,
+            mask: 0,
+            needle,
+            splat: _mm_set1_epi8(needle as i8),
+            haystack: core::marker::PhantomData,
+        }
+    }
+
+    unsafe fn next(&mut self) -> Option<usize> {
+        if self.start >= self.end {
+            return None;
+        }
+
+        'main: loop {
+            // Processing current move mask
+            if self.mask != 0 {
+                let offset =
+                    self.current.sub(BYTES).add(first_offset(self.mask));
+                self.mask = clear_least_significant_bit(self.mask);
+
+                return Some(offset.distance(self.start));
+            }
+
+            // Main loop of unaligned loads
+            while self.current <= self.end.sub(BYTES) {
+                let chunk = _mm_loadu_si128(self.current as *const __m128i);
+                let cmp = _mm_cmpeq_epi8(chunk, self.splat);
+                let mask = _mm_movemask_epi8(cmp) as u32;
+
+                self.current = self.current.add(BYTES);
+
+                if mask != 0 {
+                    self.mask = mask;
+                    continue 'main;
+                }
+            }
+
+            // Processing remaining bytes linearly
+            while self.current < self.end {
+                if *self.current == self.needle {
+                    let offset = self.current.distance(self.start);
+                    self.current = self.current.add(1);
+                    return Some(offset);
+                }
+                self.current = self.current.add(1);
+            }
+
+            return None;
+        }
+    }
 }
 
 struct OneMatchesUnalignedIter<'h>(OneMatchesUnaligned<'h>);
 
 impl<'h> OneMatchesUnalignedIter<'h> {
     fn new(needle: u8, haystack: &[u8]) -> Self {
-        unsafe { OneMatchesUnalignedIter(OneMatchesUnaligned::new(needle, haystack)) }
+        unsafe { Self(OneMatchesUnaligned::new(needle, haystack)) }
     }
 }
 
@@ -316,7 +403,7 @@ struct OneMatchesAlignedIter<'h>(OneMatchesAligned<'h>);
 
 impl<'h> OneMatchesAlignedIter<'h> {
     fn new(needle: u8, haystack: &[u8]) -> Self {
-        unsafe { OneMatchesAlignedIter(OneMatchesAligned::new(needle, haystack)) }
+        unsafe { Self(OneMatchesAligned::new(needle, haystack)) }
     }
 }
 
@@ -329,9 +416,31 @@ impl<'h> Iterator for OneMatchesAlignedIter<'h> {
     }
 }
 
+struct OneMatchesUnalignedThinIter<'h>(OneMatchesUnalignedThin<'h>);
+
+impl<'h> OneMatchesUnalignedThinIter<'h> {
+    fn new(needle: u8, haystack: &[u8]) -> Self {
+        unsafe { Self(OneMatchesUnalignedThin::new(needle, haystack)) }
+    }
+}
+
+impl<'h> Iterator for OneMatchesUnalignedThinIter<'h> {
+    type Item = usize;
+
+    #[inline(always)]
+    fn next(&mut self) -> Option<Self::Item> {
+        unsafe { self.0.next() }
+    }
+}
+
 #[cfg(all(target_arch = "x86_64", target_feature = "sse2"))]
 pub fn bufchr_sse2_unaligned_iter(needle: u8, haystack: &[u8]) -> usize {
     OneMatchesUnalignedIter::new(needle, haystack).count()
+}
+
+#[cfg(all(target_arch = "x86_64", target_feature = "sse2"))]
+pub fn bufchr_sse2_unaligned_thin_iter(needle: u8, haystack: &[u8]) -> usize {
+    OneMatchesUnalignedThinIter::new(needle, haystack).count()
 }
 
 #[cfg(all(target_arch = "x86_64", target_feature = "sse2"))]

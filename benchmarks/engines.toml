@@ -874,7 +874,7 @@
     args = ["clean"]
 
 [[engine]]
-  name = "rust/bufchr/memchr/prebuilt"
+  name = "rust/bufchr/memchr/prebuilt/unaligned"
   cwd = "./engines/rust-bufchr"
   [engine.version]
     bin = "./target/release/main"
@@ -882,6 +882,38 @@
   [engine.run]
     bin = "./target/release/main"
     args = ["memchr-prebuilt"]
+  [[engine.build]]
+    bin = "cargo"
+    args = ["build", "--release"]
+  [[engine.clean]]
+    bin = "cargo"
+    args = ["clean"]
+
+[[engine]]
+  name = "rust/bufchr/memchr/prebuilt/thin"
+  cwd = "./engines/rust-bufchr"
+  [engine.version]
+    bin = "./target/release/main"
+    args = ["--version"]
+  [engine.run]
+    bin = "./target/release/main"
+    args = ["--thin", "memchr-prebuilt"]
+  [[engine.build]]
+    bin = "cargo"
+    args = ["build", "--release"]
+  [[engine.clean]]
+    bin = "cargo"
+    args = ["clean"]
+
+[[engine]]
+  name = "rust/bufchr/memchr/prebuilt/aligned"
+  cwd = "./engines/rust-bufchr"
+  [engine.version]
+    bin = "./target/release/main"
+    args = ["--version"]
+  [engine.run]
+    bin = "./target/release/main"
+    args = ["--aligned", "memchr-prebuilt"]
   [[engine.build]]
     bin = "cargo"
     args = ["build", "--release"]
