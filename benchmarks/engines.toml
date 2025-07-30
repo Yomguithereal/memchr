@@ -910,3 +910,22 @@
   [[engine.clean]]
     bin = "cargo"
     args = ["clean"]
+
+[[engine]]
+  name = "rust/bufchr/memchr3/prebuilt"
+  cwd = "./engines/rust-bufchr"
+  [engine.version]
+    bin = "./target/release/main"
+    args = ["--version"]
+  [engine.run]
+    bin = "./target/release/main"
+    args = ["memchr3-prebuilt"]
+  [[engine.build]]
+    bin = "cargo"
+    args = ["build", "--release"]
+    envs = [
+      { name = "RUSTFLAGS", value = "-Ctarget-feature=+avx2" },
+    ]
+  [[engine.clean]]
+    bin = "cargo"
+    args = ["clean"]

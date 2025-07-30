@@ -53,6 +53,7 @@ engines = [
   "rust/memchr/memrchr3",
   "rust/memchrold/memchr3",
   "rust/memchrold/memrchr3",
+  "rust/bufchr/memchr3/prebuilt",
 ]
 
 [[bench]]
@@ -111,6 +112,7 @@ engines = [
   "rust/memchr/memrchr3",
   "rust/memchrold/memchr3",
   "rust/memchrold/memrchr3",
+  "rust/bufchr/memchr3/prebuilt",
 ]
 
 [[bench]]
@@ -169,4 +171,5 @@ engines = [
   "rust/memchr/memrchr3",
   "rust/memchrold/memchr3",
   "rust/memchrold/memrchr3",
+  "rust/bufchr/memchr3/prebuilt",
 ]
