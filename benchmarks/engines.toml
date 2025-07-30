@@ -885,6 +885,9 @@
   [[engine.build]]
     bin = "cargo"
     args = ["build", "--release"]
+    envs = [
+      { name = "RUSTFLAGS", value = "-Ctarget-feature=+avx2" },
+    ]
   [[engine.clean]]
     bin = "cargo"
     args = ["clean"]
@@ -901,6 +904,9 @@
   [[engine.build]]
     bin = "cargo"
     args = ["build", "--release"]
+    envs = [
+      { name = "RUSTFLAGS", value = "-Ctarget-feature=+avx2" },
+    ]
   [[engine.clean]]
     bin = "cargo"
     args = ["clean"]

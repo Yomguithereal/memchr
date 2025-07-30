@@ -141,6 +141,7 @@ const ALIGN: usize = 31;
 
 // NOTE: could clamp the mask to avoid scalar operations at beginning and end
 impl<'h> OneMatchesAligned<'h> {
+    #[target_feature(enable = "avx2")]
     unsafe fn new(needle: u8, haystack: &[u8]) -> Self {
         let ptr = haystack.as_ptr();
 
@@ -155,6 +156,7 @@ impl<'h> OneMatchesAligned<'h> {
         }
     }
 
+    #[target_feature(enable = "avx2")]
     unsafe fn next(&mut self) -> Option<usize> {
         if self.start >= self.end {
             return None;
@@ -238,6 +240,7 @@ struct OneMatchesUnaligned<'h> {
 }
 
 impl<'h> OneMatchesUnaligned<'h> {
+    #[target_feature(enable = "avx2")]
     unsafe fn new(needle: u8, haystack: &[u8]) -> Self {
         // dbg!(size_of::<Self>(), align_of::<Self>());
         let ptr = haystack.as_ptr();
@@ -253,6 +256,7 @@ impl<'h> OneMatchesUnaligned<'h> {
         }
     }
 
+    #[target_feature(enable = "avx2")]
     unsafe fn next(&mut self) -> Option<usize> {
         if self.start >= self.end {
             return None;
@@ -315,6 +319,7 @@ struct TwoMatchesUnaligned<'h> {
 }
 
 impl<'h> TwoMatchesUnaligned<'h> {
+    #[target_feature(enable = "avx2")]
     unsafe fn new(needle1: u8, needle2: u8, haystack: &[u8]) -> Self {
         // dbg!(size_of::<Self>(), align_of::<Self>());
         let ptr = haystack.as_ptr();
@@ -332,6 +337,7 @@ impl<'h> TwoMatchesUnaligned<'h> {
         }
     }
 
+    #[target_feature(enable = "avx2")]
     unsafe fn next(&mut self) -> Option<usize> {
         if self.start >= self.end {
             return None;
@@ -434,17 +440,17 @@ impl<'h> Iterator for TwoMatchesUnalignedIter<'h> {
     }
 }
 
-#[cfg(all(target_arch = "x86_64", target_feature = "sse2"))]
+#[cfg(all(target_arch = "x86_64", target_feature = "avx2"))]
 pub fn bufchr_sse2_unaligned_iter(needle: u8, haystack: &[u8]) -> usize {
     OneMatchesUnalignedIter::new(needle, haystack).count()
 }
 
-#[cfg(all(target_arch = "x86_64", target_feature = "sse2"))]
+#[cfg(all(target_arch = "x86_64", target_feature = "avx2"))]
 pub fn bufchr_sse2_aligned_iter(needle: u8, haystack: &[u8]) -> usize {
     OneMatchesAlignedIter::new(needle, haystack).count()
 }
 
-#[cfg(all(target_arch = "x86_64", target_feature = "sse2"))]
+#[cfg(all(target_arch = "x86_64", target_feature = "avx2"))]
 pub fn bufchr2_sse2_unaligned_iter(
     needle1: u8,
     needle2: u8,
